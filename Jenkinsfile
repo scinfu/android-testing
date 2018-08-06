@@ -1,79 +1,58 @@
 pipeline {
   agent { 
-    node { label 'android' }
+    node { label 'android' }                     
   }
-  options {
-    // Stop the build early in case of compile or test failures
-    skipStagesAfterUnstable()
-  }
-  stages {
-    stage('Compile') {
-      steps {
-        // Compile the app and its dependencies
-        sh './gradlew compileDebugSources'
-      }
-    }
-    stage('Unit test') {
-      steps {
-        // Compile and run the unit tests for the app and its dependencies
-        sh './gradlew testDebugUnitTest testDebugUnitTest'
+  stages {                                       
+    stage('Lint & Unit Test') {
+      parallel {                                 
+        stage('checkStyle') {
+          steps {
+            // We use checkstyle gradle plugin to perform this
+            sh './gradlew checkStyle'
+          }
+        }
 
-        // Analyse the test results and update the build result as appropriate
-        junit '**/TEST-*.xml'
-      }
-    }
-    stage('Build APK') {
-      steps {
-        // Finish building and packaging the APK
-        sh './gradlew assembleDebug'
-
-        // Archive the APKs so that they can be downloaded from Jenkins
-        archiveArtifacts '**/*.apk'
-      }
-    }
-    stage('Static analysis') {
-      steps {
-        // Run Lint and analyse the results
-        sh './gradlew lintDebug'
-        androidLint pattern: '**/lint-results-*.xml'
-      }
-    }
-    stage('Deploy') {
-      when {
-        // Only execute this stage when building from the `beta` branch
-        branch 'beta'
-      }
-      environment {
-        // Assuming a file credential has been added to Jenkins, with the ID 'my-app-signing-keystore',
-        // this will export an environment variable during the build, pointing to the absolute path of
-        // the stored Android keystore file.  When the build ends, the temporarily file will be removed.
-        //SIGNING_KEYSTORE = credentials('my-app-signing-keystore')
-
-        // Similarly, the value of this variable will be a password stored by the Credentials Plugin
-        //SIGNING_KEY_PASSWORD = credentials('my-app-signing-password')
-      }
-      steps {
-        // Build the app in release mode, and sign the APK using the environment variables
-        //sh './gradlew assembleRelease'
-
-        // Archive the APKs so that they can be downloaded from Jenkins
-        //archiveArtifacts '**/*.apk'
-
-        // Upload the APK to Google Play
-        //androidApkUpload googleCredentialsId: 'Google Play', apkFilesPattern: '**/*-release.apk', trackName: 'beta'
-      }
-      post {
-        success {
-          // Notify if the upload succeeded
-          mail to: 'n.chatbi@ntnext.it', subject: 'New build available!', body: 'Check it out!'
+        stage('Unit Test') {
+          steps {
+            // Execute your Unit Test
+            sh './gradlew testStagingDebug'
+          }
         }
       }
     }
-  }
-  post {
-    failure {
-      // Notify developer team of the failure
-      mail to: 'n.chatbi@ntnext.it', subject: 'Oops!', body: "Build ${env.BUILD_NUMBER} failed; ${env.BUILD_URL}"
+    stage('UI Testing') {
+      steps {
+        script {                                                           
+          if (currentBuild.result == null         
+              || currentBuild.result == 'SUCCESS') {  
+          // Start your emulator, testing tools
+          sh 'emulator @Nexus_Emulator_API_24
+          sh 'appium &'  
+     
+          // You're set to go, now execute your UI test
+          sh 'rspec spec -fd'
+          }
+        }
+      }
+    }
+    stage('Deploy') {
+      steps {
+        script {                                                        
+          if (currentBuild.result == null         
+              || currentBuild.result == 'SUCCESS') {  
+             if(env.BRANCH_NAME ==~ /master/) {
+               // Deploy when the committed branch is master (we use fastlane to complete this)     
+               sh 'fastlane app_deploy'
+          }
+        }
+      }
+    }
+}
+  post {                                          
+    always {
+      archiveArtifacts(allowEmptyArchive: true, artifacts: 'app/build/outputs/apk/production/release/*.apk')
+      // And kill the emulator?
+      sh 'adb emu kill'
     }
   }
 }
