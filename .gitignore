@@ -1,10 +1,10 @@
-.idea
 *.iml
-local.properties
-build
 .gradle
-# Eclipse project files
-.project
-.settings/	
-.classpath
-bazel-*
+/local.properties
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
