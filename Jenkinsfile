@@ -19,5 +19,11 @@ pipeline {
                 echo 'Deploying....'
             }
         }
+        stage('Archive'){
+          steps{
+            //tell Jenkins to archive the apks
+            archiveArtifacts artifacts: 'app/build/outputs/apk/*.apk', fingerprint: true
+          }
+        }
     }
 }
